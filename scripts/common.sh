@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Version variables for Noir and BB
-NARGO_VERSION="1.0.0-beta.5"
-BB_VERSION="0.84.0"
+NARGO_VERSION="1.0.0-beta.19"
+BB_VERSION="4.2.0"
 
 # Function to check and update versions of Noir and BB
 check_versions() {

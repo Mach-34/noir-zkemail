@@ -40,7 +40,8 @@ pub fn parse_email_address<let MAX_HEADER_LENGTH: u32>(
     // check the sequence is proceeded by an acceptable character
     if email_address_sequence.index != 0 {
         assert(
-            EMAIL_ADDRESS_CHAR_TABLE[header.get_unchecked(email_address_sequence.index - 1)] == 2,
+            EMAIL_ADDRESS_CHAR_TABLE[header.get_unchecked(email_address_sequence.index - 1) as u32]
+                == 2,
             "Email address must start with an acceptable character",
         );
     }
@@ -48,7 +49,7 @@ pub fn parse_email_address<let MAX_HEADER_LENGTH: u32>(
         assert(
             EMAIL_ADDRESS_CHAR_TABLE[header.get_unchecked(
                 email_address_sequence.index + email_address_sequence.length,
-            )]
+            ) as u32]
                 == 3,
             "Email address must end with an acceptable character",
         );
@@ -61,12 +62,14 @@ pub fn parse_email_address<let MAX_HEADER_LENGTH: u32>(
             let letter = header.get_unchecked(index);
             email_address.set_unchecked(i, letter);
             assert(
-                EMAIL_ADDRESS_CHAR_TABLE[letter] == 1,
+                EMAIL_ADDRESS_CHAR_TABLE[letter as u32] == 1,
                 "Email address must only contain acceptable characters",
             );
         }
     }
-    email_address.len = email_address_sequence.length;
+    // Use from_parts_unchecked to set length without direct field access
+    email_address =
+        BoundedVec::from_parts_unchecked(email_address.storage(), email_address_sequence.length);
     // todo: should probably introduce a check for @
     email_address
 }

@@ -91,6 +91,7 @@ pub fn partial_sha256_var_start<let N: u32>(msg: [u8; N]) -> [u32; 8] {
     let mut msg_byte_ptr = 0; // Pointer into msg_block
     for i in 0..num_blocks {
         let msg_start = BLOCK_SIZE * i;
+        // Safety: build_msg_block_iter is an unconstrained helper; its output is verified by verify_msg_block below
         let (new_msg_block, new_msg_byte_ptr) = unsafe { build_msg_block_iter(msg, N, msg_start) };
         if msg_start < N {
             msg_block = new_msg_block;
@@ -137,6 +138,7 @@ pub fn partial_sha256_var_interstitial<let N: u32>(
     let mut msg_byte_ptr = 0; // Pointer into msg_block
     for i in 0..num_blocks {
         let msg_start = BLOCK_SIZE * i;
+        // Safety: build_msg_block_iter is an unconstrained helper; its output is verified by verify_msg_block below
         let (new_msg_block, new_msg_byte_ptr) = unsafe { build_msg_block_iter(msg, N, msg_start) };
         if msg_start < N {
             msg_block = new_msg_block;
@@ -177,16 +179,15 @@ pub fn partial_sha256_var_interstitial<let N: u32>(
 pub fn partial_sha256_var_end<let N: u32>(
     mut h: [u32; 8],
     msg: [u8; N],
-    message_size: u64,
-    real_message_size: u64,
+    message_size: u32,
+    real_message_size: u32,
 ) -> [u8; 32] {
-    let message_size = message_size as u32; // noir stdlib uses u64
-    let real_message_size = real_message_size as u32; // noir stdlib uses u64
     let num_blocks = N / BLOCK_SIZE;
     let mut msg_block: [u8; BLOCK_SIZE] = [0; BLOCK_SIZE];
     let mut msg_byte_ptr = 0; // Pointer into msg_block
     for i in 0..num_blocks {
         let msg_start = BLOCK_SIZE * i;
+        // Safety: build_msg_block_iter is an unconstrained helper; its output is verified by verify_msg_block below
         let (new_msg_block, new_msg_byte_ptr) =
             unsafe { build_msg_block_iter(msg, message_size, msg_start) };
         if msg_start < message_size {
@@ -216,6 +217,7 @@ pub fn partial_sha256_var_end<let N: u32>(
     // or our message cannot be evenly split into blocks.
     if modulo != 0 {
         let msg_start = BLOCK_SIZE * num_blocks;
+        // Safety: build_msg_block_iter is an unconstrained helper; its output is verified by verify_msg_block below
         let (new_msg_block, new_msg_byte_ptr) =
             unsafe { build_msg_block_iter(msg, message_size, msg_start) };
 
@@ -248,6 +250,7 @@ pub fn partial_sha256_var_end<let N: u32>(
     let last_block = msg_block;
     msg_byte_ptr = msg_byte_ptr + 1;
 
+    // Safety: pad_msg_block is an unconstrained helper; padding correctness is verified in the constrained path below
     unsafe {
         let (new_msg_block, new_msg_byte_ptr) = pad_msg_block(msg_block, msg_byte_ptr);
         msg_block = new_msg_block;
@@ -278,6 +281,7 @@ pub fn partial_sha256_var_end<let N: u32>(
         msg_byte_ptr = 0;
     }
 
+    // Safety: attach_len_to_msg_block is an unconstrained helper; length bytes are verified in the constrained check below
     msg_block = unsafe { attach_len_to_msg_block(msg_block, msg_byte_ptr, real_message_size) };
 
     if !is_unconstrained() {
@@ -362,8 +366,8 @@ fn test_partial_hash() {
         data1[i] = DATA[data0.len() + i];
     }
     let state = partial_sha256_var_start(data0);
-    let hash = partial_sha256_var_end(state, data1, data1.len() as u64, DATA.len() as u64);
-    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u64);
+    let hash = partial_sha256_var_end(state, data1, data1.len() as u32, DATA.len() as u32);
+    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u32);
     assert_eq(hash, correct_hash);
 }
 
@@ -382,10 +386,10 @@ fn test_partial_hash_interstitial() {
     let hash = partial_sha256_var_end(
         interstitial_hash,
         data2,
-        data2.len() as u64,
-        DATA.len() as u64,
+        data2.len() as u32,
+        DATA.len() as u32,
     );
-    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u64);
+    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u32);
     assert_eq(hash, correct_hash);
 }
 
@@ -404,9 +408,9 @@ fn test_partial_hash_interstitial_var() {
     let hash = partial_sha256_var_end(
         interstitial_hash,
         data2,
-        data2.len() as u64,
-        DATA.len() as u64,
+        data2.len() as u32,
+        DATA.len() as u32,
     );
-    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u64);
+    let correct_hash = sha256::sha256_var(DATA, DATA.len() as u32);
     assert_eq(hash, correct_hash);
 }

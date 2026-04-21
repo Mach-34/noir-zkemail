@@ -1,6 +1,40 @@
 use crate::{CR, LF};
-use nodash::array::pack_bytes;
-use std::hash::poseidon2::Poseidon2;
+use nodash::pack_bytes;
+
+/// Poseidon2 sponge hash using the public poseidon2_permutation primitive.
+/// Replicates the behavior of the stdlib's Poseidon2::hash(input, input.len())
+/// which is pub(crate) and not accessible from external crates.
+fn poseidon2_hash<let N: u32>(input: [Field; N]) -> Field {
+    let two_pow_64: Field = 18446744073709551616;
+    let iv: Field = (N as Field) * two_pow_64;
+
+    let mut state: [Field; 4] = [0, 0, 0, iv];
+    let mut cache: [Field; 3] = [0; 3];
+    let mut cache_size: u32 = 0;
+
+    for i in 0..N {
+        if cache_size == 3 {
+            for j in 0..3 {
+                state[j] += cache[j];
+            }
+            state = std::hash::poseidon2_permutation(state, 4);
+            cache[0] = input[i];
+            cache_size = 1;
+        } else {
+            cache[cache_size] = input[i];
+            cache_size += 1;
+        }
+    }
+
+    // Final duplex: absorb remaining cache and squeeze
+    for i in 0..3 {
+        if i < cache_size {
+            state[i] += cache[i];
+        }
+    }
+    state = std::hash::poseidon2_permutation(state, 4);
+    state[0]
+}
 
 /**
  * Computes R by packing bytes into fields before hashing to reduce the work
@@ -17,7 +51,7 @@ fn compressed_r<let N: u32>(encoded: [u8; N], decoded: [u8; N]) -> Field {
         input[i] = encoded_packed[i];
         input[i + N / 31 + 1] = decoded_packed[i];
     }
-    Poseidon2::hash(input, input.len())
+    poseidon2_hash(input)
 }
 
 /**
@@ -36,10 +70,10 @@ pub fn find_zeroes<let N: u32>(encoded: [u8; N]) -> [bool; N] {
     // find indexes of chars to zero
     let mut should_zero: [bool; N] = [false; N];
     should_zero[0] = is_break[0];
-    should_zero[1] = is_break[1] + is_break[0];
+    should_zero[1] = is_break[1] | is_break[0];
     should_zero[N - 1] = is_break[N - 3];
     for i in 2..N - 1 {
-        should_zero[i] = is_break[i] + is_break[i - 1] + is_break[i - 2];
+        should_zero[i] = is_break[i] | is_break[i - 1] | is_break[i - 2];
     }
 
     should_zero
