@@ -510,3 +510,49 @@ mod test_address_extraction {
         );
     }
 }
+
+// Regression tests for issue #57: constrain_header_field_detect_last_angle_bracket
+// skipped the first HEADER_FIELD_NAME_LENGTH + 1 bytes of the header field value,
+// disabling the angle-bracket detection and the CR (newline) check in that prefix.
+mod test_issue_57_security {
+    use crate::{
+        headers::{
+            constrain_header_field_detect_last_angle_bracket, email_address::get_email_address,
+        },
+        Sequence,
+    };
+
+    // Sender spoof: the DKIM-signed real address is the bracketed <real@a.bc>, but the
+    // '<' sits at value offset 0 (inside the skipped prefix), so detection returns 0 and
+    // the "address must start immediately after '<'" guard is silently disabled. A prover
+    // can then point the extractor at the forged trailing "spoof@evil.com" instead.
+    // Header bytes: "\r\nfrom:<real@a.bc> spoof@evil.com\r\n"
+    #[test(should_fail_with = "Email address must start immediately after '<' if bracket is present")]
+    fn test_spoof_via_early_angle_bracket() {
+        let from: [u8; 4] = comptime { "from".as_bytes() };
+        let header: BoundedVec<u8, 512> = BoundedVec::from_array([
+            0x0D, 0x0A, 0x66, 0x72, 0x6F, 0x6D, 0x3A, 0x3C, 0x72, 0x65, 0x61, 0x6C, 0x40, 0x61,
+            0x2E, 0x62, 0x63, 0x3E, 0x20, 0x73, 0x70, 0x6F, 0x6F, 0x66, 0x40, 0x65, 0x76, 0x69,
+            0x6C, 0x2E, 0x63, 0x6F, 0x6D, 0x0D, 0x0A,
+        ]);
+        let field_seq = Sequence { index: 2, length: 31 };
+        let forged_addr_seq = Sequence { index: 19, length: 14 };
+        let _ = get_email_address(header, field_seq, forged_addr_seq, from);
+    }
+
+    // CRLF / header injection: a CR byte sits at value offset 2 (inside the skipped
+    // prefix), so the "must not contain newlines" assertion never runs and a malformed
+    // header is accepted. Unit-tested directly so the CR check is the only constraint.
+    // Header bytes: "\r\nfrom:aa\rbb@cc.dd\r\n"
+    #[test(should_fail_with = "Header field must not contain newlines")]
+    fn test_crlf_injection_in_skipped_prefix() {
+        let from: [u8; 4] = comptime { "from".as_bytes() };
+        let header: BoundedVec<u8, 512> = BoundedVec::from_array([
+            0x0D, 0x0A, 0x66, 0x72, 0x6F, 0x6D, 0x3A, 0x61, 0x61, 0x0D, 0x62, 0x62, 0x40, 0x63,
+            0x63, 0x2E, 0x64, 0x64, 0x0D, 0x0A,
+        ]);
+        let field_seq = Sequence { index: 2, length: 16 };
+        let _ =
+            constrain_header_field_detect_last_angle_bracket::<512, 64, 4>(header, field_seq, from);
+    }
+}
