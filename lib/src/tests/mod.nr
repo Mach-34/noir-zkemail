@@ -555,4 +555,19 @@ mod test_issue_57_security {
         let _ =
             constrain_header_field_detect_last_angle_bracket::<512, 64, 4>(header, field_seq, from);
     }
+
+    // Hardening (resolves the in-code TODO in parse_email_address): an extracted
+    // value containing no '@' must be rejected rather than returned as an address.
+    // Header bytes: "\r\nfrom:notanemail\r\n"
+    #[test(should_fail_with = "Email address must contain an '@'")]
+    fn test_address_without_at_rejected() {
+        let from: [u8; 4] = comptime { "from".as_bytes() };
+        let header: BoundedVec<u8, 512> = BoundedVec::from_array([
+            0x0D, 0x0A, 0x66, 0x72, 0x6F, 0x6D, 0x3A, 0x6E, 0x6F, 0x74, 0x61, 0x6E, 0x65, 0x6D,
+            0x61, 0x69, 0x6C, 0x0D, 0x0A,
+        ]);
+        let field_seq = Sequence { index: 2, length: 15 };
+        let addr_seq = Sequence { index: 7, length: 10 };
+        let _ = get_email_address(header, field_seq, addr_seq, from);
+    }
 }
